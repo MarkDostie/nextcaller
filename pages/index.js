@@ -20,6 +20,114 @@ export default function Home({ callerInfo }) {
 
   if (!mounted) return null;
 
+  // Handle access denied case
+  if (callerInfo.error) {
+    return (
+      <div className="container error-container">
+        <Head>
+          <title>Access Denied - CloudFront Caller Information</title>
+          <meta name="description" content="Access denied - CloudFront access required" />
+          <link rel="icon" href="/favicon.ico" />
+        </Head>
+
+        <main className="main">
+          <h1 className="error-title">🚫 Access Denied</h1>
+          <p className="error-description">
+            {callerInfo.message}
+          </p>
+          <div className="error-details">
+            <p><strong>Error:</strong> {callerInfo.error}</p>
+            <p><strong>Required:</strong> This application must be accessed through CloudFront for security reasons.</p>
+            <p><strong>Redirect URL:</strong> <a href={callerInfo.redirectUrl} className="redirect-link">{callerInfo.redirectUrl}</a></p>
+          </div>
+          <div className="error-actions">
+            <a href={callerInfo.redirectUrl} className="redirect-button">
+              🔒 Access via CloudFront
+            </a>
+          </div>
+        </main>
+
+        <style jsx>{`
+          .container {
+            min-height: 100vh;
+            padding: 0 0.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+          }
+
+          .main {
+            padding: 5rem 0;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+          }
+
+          .error-title {
+            margin: 0 0 1rem;
+            line-height: 1.15;
+            font-size: 3rem;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+          }
+
+          .error-description {
+            line-height: 1.5;
+            font-size: 1.2rem;
+            color: #f0f0f0;
+            margin-bottom: 2rem;
+          }
+
+          .error-details {
+            background: rgba(255,255,255,0.1);
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+          }
+
+          .error-details p {
+            margin: 0.5rem 0;
+            color: white;
+          }
+
+          .redirect-link {
+            color: #ffd700;
+            text-decoration: none;
+            font-weight: bold;
+          }
+
+          .redirect-link:hover {
+            text-decoration: underline;
+          }
+
+          .redirect-button {
+            background: white;
+            color: #ee5a24;
+            padding: 1rem 2rem;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: transform 0.2s;
+            font-size: 1.1rem;
+          }
+
+          .redirect-button:hover {
+            transform: translateY(-2px);
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // Normal caller info display
   return (
     <div className="container">
       <Head>
@@ -36,6 +144,11 @@ export default function Home({ callerInfo }) {
         <p className="description">
           This page displays information about your location and connection as determined by CloudFront
         </p>
+
+        <div className="security-badge">
+          <span className="shield">🛡️</span>
+          <span className="security-text">Protected by CloudFront + WAF</span>
+        </div>
 
         <div className="grid">
           <div className="card">
@@ -101,6 +214,22 @@ export default function Home({ callerInfo }) {
               <strong>Request ID:</strong> {callerInfo.requestId || 'Unknown'}
             </div>
           </div>
+
+          <div className="card">
+            <h2>🔒 Security Information</h2>
+            <div className="info-item">
+              <strong>Access Method:</strong> {callerInfo.accessMethod || 'Unknown'}
+            </div>
+            <div className="info-item">
+              <strong>CloudFront Headers:</strong> {callerInfo.hasCloudFrontHeaders ? 'Present' : 'Missing'}
+            </div>
+            <div className="info-item">
+              <strong>WAF Protection:</strong> {callerInfo.wafProtected ? 'Active' : 'Inactive'}
+            </div>
+            <div className="info-item">
+              <strong>Security Score:</strong> {callerInfo.securityScore || 'Unknown'}
+            </div>
+          </div>
         </div>
 
         <div className="raw-data">
@@ -150,7 +279,27 @@ export default function Home({ callerInfo }) {
           font-size: 1.2rem;
           text-align: center;
           color: #f0f0f0;
+          margin-bottom: 1rem;
+        }
+
+        .security-badge {
+          display: flex;
+          align-items: center;
+          background: rgba(255,255,255,0.1);
+          padding: 0.5rem 1rem;
+          border-radius: 25px;
           margin-bottom: 2rem;
+          backdrop-filter: blur(10px);
+        }
+
+        .shield {
+          font-size: 1.2rem;
+          margin-right: 0.5rem;
+        }
+
+        .security-text {
+          color: white;
+          font-weight: bold;
         }
 
         .grid {
@@ -229,12 +378,51 @@ export default function Home({ callerInfo }) {
   );
 }
 
-// This function gets called at build time on server-side
+// Enhanced server-side validation with multiple security checks
 export async function getServerSideProps({ req }) {
-  // Extract CloudFront headers
   const headers = req.headers;
   
-  // Determine device type
+  // Security validation - Multiple CloudFront checks
+  const cloudFrontSecret = headers['x-cloudfront-secret'];
+  const expectedSecret = 'SecureAmplifyAccess2025RandomKey'; // Change this to your secret
+  
+  const hasCloudFrontHeaders = !!(
+    headers['cloudfront-viewer-country'] || 
+    headers['x-amz-cf-id'] ||
+    (headers['via'] && headers['via'].includes('cloudfront'))
+  );
+  
+  const hasCloudFrontUserAgent = headers['user-agent'] === 'Amazon CloudFront';
+  const hasXForwardedFor = !!headers['x-forwarded-for'];
+  
+  // Calculate security score
+  let securityScore = 0;
+  if (cloudFrontSecret === expectedSecret) securityScore += 40;
+  if (hasCloudFrontHeaders) securityScore += 30;
+  if (hasCloudFrontUserAgent) securityScore += 20;
+  if (hasXForwardedFor) securityScore += 10;
+  
+  // Block if not from CloudFront (security score too low)
+  if (cloudFrontSecret !== expectedSecret || !hasCloudFrontHeaders || securityScore < 70) {
+    console.log('Access denied - Security validation failed');
+    console.log('Security Score:', securityScore);
+    console.log('CloudFront Secret Match:', cloudFrontSecret === expectedSecret);
+    console.log('Has CloudFront Headers:', hasCloudFrontHeaders);
+    
+    return {
+      props: {
+        callerInfo: {
+          error: 'ACCESS_DENIED',
+          message: 'This application must be accessed through CloudFront for security reasons.',
+          redirectUrl: 'https://d3l95bmdqn7noz.cloudfront.net',
+          securityScore: securityScore,
+          timestamp: new Date().toISOString()
+        }
+      }
+    };
+  }
+  
+  // Extract CloudFront headers for caller information
   const isMobile = headers['cloudfront-is-mobile-viewer'] === 'true';
   const isDesktop = headers['cloudfront-is-desktop-viewer'] === 'true';
   const isTablet = headers['cloudfront-is-tablet-viewer'] === 'true';
@@ -246,7 +434,7 @@ export async function getServerSideProps({ req }) {
   else if (isTablet) deviceType = 'Tablet';
   else if (isSmartTV) deviceType = 'Smart TV';
 
-  // Get the real IP address (could be from X-Forwarded-For or CloudFront-Viewer-Address)
+  // Get the real IP address
   const ipAddress = headers['x-forwarded-for']?.split(',')[0] || 
                    headers['cloudfront-viewer-address']?.split(':')[0] || 
                    req.connection.remoteAddress || 
@@ -276,6 +464,12 @@ export async function getServerSideProps({ req }) {
     serverTime: new Date().toISOString(),
     requestId: headers['x-amz-cf-id'] || 'Unknown',
     
+    // Security information
+    accessMethod: 'CloudFront',
+    hasCloudFrontHeaders,
+    wafProtected: true,
+    securityScore: securityScore + '/100',
+    
     // Raw headers for debugging
     rawHeaders: {
       'cloudfront-viewer-country': headers['cloudfront-viewer-country'],
@@ -289,7 +483,9 @@ export async function getServerSideProps({ req }) {
       'x-forwarded-for': headers['x-forwarded-for'],
       'x-amz-cf-pop': headers['x-amz-cf-pop'],
       'x-amz-cf-id': headers['x-amz-cf-id'],
-      'user-agent': headers['user-agent']
+      'user-agent': headers['user-agent'],
+      'via': headers['via'],
+      'x-cloudfront-secret': cloudFrontSecret ? '[PRESENT]' : '[MISSING]'
     }
   };
 
