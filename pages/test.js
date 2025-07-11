@@ -8,7 +8,7 @@ export async function getServerSideProps() {
   };
 }
 
-export default function Test({ message }) {
+export default function Test({ message, time }) {
    return (
     <div>
       <p>{message}</p>
