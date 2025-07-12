@@ -378,7 +378,7 @@ export default function Home({ callerInfo }) {
   );
 }
 
-// Enhanced server-side validation with multiple security checks
+
 export async function getServerSideProps({ req }) {
   const headers = req.headers;
   
@@ -413,7 +413,7 @@ export async function getServerSideProps({ req }) {
       props: {
         callerInfo: {
           error: 'ACCESS_DENIED',
-          message: 'This application must be accessed through CloudFront for security reasons.',
+          message: 'This application must be accessed through CloudFront for security reasons. ' + cloudFrontSecret,
           redirectUrl: 'https://d3l95bmdqn7noz.cloudfront.net',
           securityScore: securityScore,
           timestamp: new Date().toISOString()
